@@ -197,5 +197,6 @@ async def _(event: GroupMessageEvent, bot: Bot):
             nickname=config.tongle_airport_name
         ))
     logger.debug("[forwardMessage] "+str(forwardMessage))
-    await bot.send_group_forward_message(group_id=event.group_id,messages=forwardMessage)
+    #沙比AI
+    await bot.send_group_forward_msg(group_id=event.group_id,messages=forwardMessage)
 
