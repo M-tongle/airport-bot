@@ -41,7 +41,7 @@ async def _(matcher: Matcher, args: Message = CommandArg()):
     if args.extract_plain_text():
         matcher.set_arg("tableName", args)
 
-@sqlTableSet.got("tableName","请输入表名")
+@sqlTableSet.got("tableName","请发送表名")
 async def _(tableName: str = ArgPlainText()):
     await sqlTableSet.send(Message("开始创建......"))
     

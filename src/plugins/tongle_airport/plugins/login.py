@@ -12,7 +12,7 @@ from ..config import Config
 import requests
 import hashlib
 import json
-from .sqlite import userInfo, userEmail, setUserPwd, setUserEmail, setUserAuthData, userAuthData
+from .sqlite import userInfo, userEmail, setUserPwd, setUserEmail, setUserAuthData, userAuthData, getUserPwd
 
 __plugin_meta__ = PluginMetadata(
     name="tongle-login",
@@ -47,7 +47,7 @@ async def handle_function(matcher: Matcher, args: Message = CommandArg()):
     if args.extract_plain_text():
         matcher.set_arg("userEmail",args)
 
-@email.got("userEmail","请输入邮箱地址")
+@email.got("userEmail","请发送邮箱地址")
 async def handle_function(event: Event, userEmail: Message = ArgPlainText()):
     with open("src/plugins/tongle_airport/sqlTableName.txt","r") as file:
         tableName = file.readline()
@@ -200,3 +200,45 @@ async def _(event: GroupMessageEvent, bot: Bot):
     #沙比AI
     await bot.send_group_forward_msg(group_id=event.group_id,messages=forwardMessage)
 
+regist = on_command(cmd="注册",priority=50,block=True)
+
+@regist.got("email","请发送邮箱地址\n注意!请不要使用自己的域名邮箱:")
+async def _(mather: Matcher, email: Message = ArgPlainText()):
+    url = config.tongle_airport_url + "/api/v1/guest/comm/config"
+    if getUserPwd(tableName="botUser",qqid=mather.event.get_user_id()) == None:
+        await regist.finish(Message("注册失败!原因:您未提前记录密码\n请在私聊中使用 /记录密码"))
+    respConfig = requests.get(url=url)
+    if respConfig.status_code != 200:
+        await regist.finish(Message("注册失败!原因:获取配置失败"))
+    respConfigData = json.loads(respConfig.text)
+    if respConfigData["data"]["is_email_verify"]:
+        url = config.tongle_airport_url + "/api/v1/passport/comm/sendEmailVerify"
+        emailVerify = requests.post(url=url,data={"email":email})
+        if emailVerify.status_code == 200:
+            await regist.send(Message("发送验证邮件!请查看邮箱并输入验证码"))
+            regist.skip()
+        else:
+            await regist.finish(Message("发送验证邮件失败!原因:未知错误"))
+    else:
+        mather.set_arg("email","")
+
+@regist.got("emailCode","请发送邮箱验证码:")
+async def _(event: Event, mather: Matcher, emailCode: Message = ArgPlainText()):
+    with open("src/plugins/tongle_airport/sqlTableName.txt","r") as file:
+        tableName = file.readline()
+    url = config.tongle_airport_url + "/api/v1/passport/auth/register"
+    data = {
+        "invite_code": "",
+        "email": mather.get("email"),
+        "email_code": emailCode,
+        "password": getUserPwd(tableName=tableName,qqid=event.get_user_id()),
+        "auth_password": getUserPwd(tableName=tableName,qqid=event.get_user_id()),
+        "recaptcha": ""
+    }
+    resp = requests.post(url=url,data=data)
+    if resp.status_code == 200:
+        await regist.finish(Message("注册成功!"))
+    elif resp.status_code == 422:
+        await regist.finish(Message("注册失败!原因:"+json.loads(resp.text)["message"]))
+    else:
+        await regist.finish(Message("注册失败!原因:未知错误\n"+json.loads(resp.text)["message"]))
