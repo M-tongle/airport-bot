@@ -1,5 +1,5 @@
 from nonebot import get_plugin_config, on_command, on_request, logger
-from nonebot.adapters.onebot.v11.event import Event, PrivateMessageEvent, FriendRequestEvent
+from nonebot.adapters.onebot.v11.event import Event, PrivateMessageEvent, FriendRequestEvent, GroupMessageEvent
 from nonebot.matcher import Matcher
 from nonebot.plugin import PluginMetadata
 from nonebot.params import CommandArg, ArgPlainText
@@ -23,15 +23,15 @@ __plugin_meta__ = PluginMetadata(
 
 config = get_plugin_config(Config)
 
-login = on_command(cmd="login",priority=50,block=True)
-pwd = on_command(cmd="set-pwd",priority=50,block=True)
-email = on_command(cmd="set-email",priority=50,block=True)
-registFriendRequest = on_command(cmd="add",priority=50,block=True)
+login = on_command(cmd="登录",priority=50,block=True)
+pwd = on_command(cmd="记录密码",priority=50,block=True)
+email = on_command(cmd="记录邮箱",priority=50,block=True)
+registFriendRequest = on_command(cmd="申请加好友",priority=50,block=True)
 
 @pwd.handle()
 async def handle_function(event: Event, matcher: Matcher, args: Message = CommandArg()):
     if not isinstance(event, PrivateMessageEvent):
-        await pwd.finish(Message("请在私聊中使用!\n向bot发送加好友请求,bot会自动同意"))
+        await pwd.finish(Message("请在私聊中使用!\n使用 /申请加好友 来获取加好友权限"))
     if args.extract_plain_text():
         matcher.set_arg("pwd",args)
 
@@ -63,9 +63,9 @@ async def _(event: Event):
     logger.debug("[SQLdata] "+str(sqlData))
     
     if not sqlData["email"]:
-        await login.finish(Message("登录失败:您未记录邮箱!\n请使用/set-email记录邮箱"))
+        await login.finish(Message("登录失败:您未记录邮箱!\n请使用 /记录邮箱"))
     if not sqlData["password"]:
-        await login.finish(Message("登录失败:您未记录密码!\n请在私聊中使用/set-pwd记录密码"))
+        await login.finish(Message("登录失败:您未记录密码!\n请在私聊中使用 /记录密码"))
     
     req = {
         "email": sqlData["email"],
@@ -150,6 +150,52 @@ async def _(event: Event):
         info += "账户余额:" + formatted_balance
         await getInfo.finish(Message(f"用户信息:\n{info}"))
     elif resp1.status_code == 403 or resp2.status_code == 403:
-        await getInfo.finish(Message("获取用户信息失败!原因:登录过期,请重新登录"))
+        await getInfo.finish(Message("获取用户信息失败!原因:未登录或登录过期"))
     else:
         await getInfo.finish(Message("获取用户信息失败!原因:未知错误"))
+
+getNotice = on_command(cmd="公告",priority=50,block=True)
+
+#构造合并转发消息的node
+def createForwardMessageNode(title:str, content:str, userId:str, nickname:str):
+    return {
+        "type": "node",
+        "data": {
+            "user_id": userId,
+            "nickname": nickname,
+            "content": [
+                {
+                    "type": "text",
+                    "data": {
+                        "text": title+"\n\n"+content
+                    }
+                }
+            ]
+        }
+    }
+
+@getNotice.handle()
+async def _(event: GroupMessageEvent, bot: Bot):
+    url = config.tongle_airport_url + "/api/v1/user/notice/fetch"
+    with open("src/plugins/tongle_airport/sqlTableName.txt","r") as file:
+        tableName = file.readline()
+    headers = {
+        "Authorization": userAuthData(tableName=tableName,qqid=event.get_user_id())
+    }
+    resp = requests.get(url=url, headers=headers)
+    logger.debug("[resp] "+str(resp.text))
+    if resp.status_code == 403:
+        await getNotice.finish(Message("获取公告失败!原因:未登录或登录过期"))
+    elif resp.status_code != 200:
+        await getNotice.finish(Message("获取公告失败!原因:未知错误"))
+    forwardMessage = []
+    for notice in json.loads(resp.text)["data"]:
+        forwardMessage.append(createForwardMessageNode(
+            title=notice["title"],
+            content=notice["content"].replace("<br>",""),
+            userId=bot.self_id,
+            nickname=config.tongle_airport_name
+        ))
+    logger.debug("[forwardMessage] "+str(forwardMessage))
+    await bot.send_group_forward_message(group_id=event.group_id,messages=forwardMessage)
+
