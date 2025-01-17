@@ -114,7 +114,7 @@ async def _(event: FriendRequestEvent, bot: Bot):
     await asyncio.sleep(3)
     await acceptFriendRequest.finish(Message("已同意您的好友请求"))
 
-getInfo = on_command(cmd="info",priority=50,block=True)
+getInfo = on_command(cmd="个人信息",priority=50,block=True)
 
 @getInfo.handle()
 async def _(event: Event):
@@ -197,7 +197,7 @@ async def _(event: GroupMessageEvent, bot: Bot):
             nickname=config.tongle_airport_name
         ))
     logger.debug("[forwardMessage] "+str(forwardMessage))
-    #沙比AI
+    
     await bot.send_group_forward_msg(group_id=event.group_id,messages=forwardMessage)
 
 regist = on_command(cmd="注册",priority=50,block=True)
